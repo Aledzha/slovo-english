@@ -306,10 +306,7 @@ export default function Home() {
     const credentials = { email: authEmail.trim(), password: authPassword };
     const result = authMode === "login"
       ? await supabase.auth.signInWithPassword(credentials)
-      : await supabase.auth.signUp({
-          ...credentials,
-          options: { emailRedirectTo: "https://aledzha.github.io/slovo-english/" },
-        });
+      : await supabase.auth.signUp(credentials);
     setAuthBusy(false);
     if (result.error) {
       setAuthMessage(result.error.message === "Invalid login credentials"
@@ -318,7 +315,8 @@ export default function Home() {
       return;
     }
     if (authMode === "register" && !result.data.session) {
-      setAuthMessage("Проверьте почту и подтвердите регистрацию.");
+      setAuthMode("login");
+      setAuthMessage("Аккаунт создан. Теперь нажмите «Войти».");
       return;
     }
     setAuthOpen(false);

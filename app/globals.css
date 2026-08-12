@@ -44,6 +44,8 @@ nav button::after { content: ""; position: absolute; left: 18px; right: 18px; bo
 nav button:hover, nav .navActive { color: var(--green); }
 nav .navActive::after { background: var(--green); }
 .navCount { min-width: 22px; height: 22px; margin-left: 5px; padding: 0 6px; display: inline-grid; place-items: center; border-radius: 11px; background: var(--mint); color: var(--green-dark); font-size: 11px; }
+.accountButton { min-height: 38px; padding: 0 15px; border: 1px solid #bfd0c4; border-radius: 11px; background: #edf5ef; color: var(--green-dark); font-size: 12px; font-weight: 800; }
+.accountButton:hover { background: var(--mint); }
 
 .shell { width: min(1040px, calc(100% - 40px)); margin: 0 auto; padding: 28px 0 48px; }
 .progressPanel { min-height: 90px; padding: 18px 24px; display: grid; grid-template-columns: 160px 1fr 54px; align-items: center; gap: 24px; background: #eaeee8; border: 1px solid #d6ddd5; border-radius: 18px; }
@@ -129,12 +131,30 @@ h1 { margin: 0; font: 600 30px/1.2 Georgia, serif; letter-spacing: -.025em; }
 .loadMore { min-height: 46px; margin: 16px auto 0; padding: 0 22px; display: block; border: 1px solid #c8d1c9; border-radius: 11px; background: var(--white); color: var(--green); font-size: 12px; font-weight: 800; }
 .loadMore:hover { background: #edf4ef; }
 
+.cloudStatus { position: fixed; right: 18px; bottom: 16px; z-index: 5; margin: 0; padding: 9px 13px; border: 1px solid #cbd8ce; border-radius: 20px; background: rgba(255, 254, 250, .94); color: var(--green-dark); box-shadow: 0 5px 18px rgba(45, 58, 48, .1); font-size: 10px; font-weight: 800; }
+.cloudStatus span { margin-right: 4px; }
+.authOverlay { position: fixed; inset: 0; z-index: 20; padding: 20px; display: grid; place-items: center; background: rgba(18, 29, 22, .55); backdrop-filter: blur(4px); }
+.authDialog { position: relative; width: min(420px, 100%); padding: 30px; border: 1px solid var(--line); border-radius: 22px; background: var(--white); box-shadow: 0 22px 70px rgba(0, 0, 0, .22); }
+.authDialog h2 { margin: 0; font: 600 29px/1.2 Georgia, serif; }
+.authClose { position: absolute; top: 12px; right: 14px; width: 34px; height: 34px; border: 0; border-radius: 50%; background: #f0f1ed; color: #667069; font-size: 23px; line-height: 1; }
+.authHint { margin: 10px 0 20px; color: var(--muted); font-size: 13px; line-height: 1.5; }
+.authEmail { margin: 14px 0 0; color: var(--green-dark); font-weight: 800; overflow-wrap: anywhere; }
+.authForm { display: grid; gap: 14px; }
+.authForm label { color: #4f5b53; font-size: 11px; font-weight: 800; }
+.authForm input { width: 100%; height: 48px; margin-top: 6px; padding: 0 13px; border: 1px solid #c9d0c9; border-radius: 11px; background: white; outline: none; }
+.authForm input:focus { border-color: var(--green); box-shadow: 0 0 0 3px rgba(33, 106, 69, .12); }
+.authSubmit { width: 100%; min-height: 50px; border-radius: 11px; font-weight: 800; }
+.authSubmit:disabled { opacity: .65; cursor: wait; }
+.authMessage { margin: 0; color: #8a6015; font-size: 12px; line-height: 1.45; }
+.authSwitch { width: 100%; margin-top: 16px; border: 0; background: transparent; color: var(--green); font-size: 12px; font-weight: 800; text-decoration: underline; text-underline-offset: 3px; }
+
 button:focus-visible, a:focus-visible, input:focus-visible + .toggle { outline: 3px solid #8db9a2; outline-offset: 3px; }
 
 @media (max-width: 720px) {
-  .topbar { height: auto; padding: 14px 18px 0; flex-direction: column; align-items: stretch; gap: 10px; }
+  .topbar { height: auto; padding: 14px 18px 0; flex-wrap: wrap; gap: 10px; }
   .brand { align-self: flex-start; }
-  nav { height: 48px; justify-content: space-between; }
+  nav { order: 3; width: 100%; height: 48px; justify-content: space-between; }
+  .accountButton { align-self: center; }
   nav button { padding: 0 5px; font-size: 12px; }
   nav button::after { left: 5px; right: 5px; }
   .shell { width: min(100% - 24px, 1040px); padding-top: 16px; }
@@ -170,5 +190,7 @@ button:focus-visible, a:focus-visible, input:focus-visible + .toggle { outline: 
   .formIntro { align-items: flex-start; flex-direction: column; gap: 3px; }
   .libraryTools { align-items: stretch; flex-direction: column; gap: 8px; }
   .wordSearch { width: 100%; }
+  .authDialog { padding: 25px 20px; }
+  .cloudStatus { left: 12px; right: 12px; bottom: 10px; text-align: center; }
 }
 

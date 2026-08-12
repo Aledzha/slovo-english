@@ -1,7 +1,9 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import type { User } from "@supabase/supabase-js";
 import frequencyWords from "./data/frequency-words.json";
+import { supabase } from "./lib/supabase";
 
 type Status = "new" | "review" | "learned";
 type View = "learn" | "review" | "words";
@@ -27,6 +29,8 @@ type HistoryItem = { word: Word; view: View };
 const STORAGE_KEY = "slovo-progress-v1";
 const DAY = 24 * 60 * 60 * 1000;
 const INTERVALS = [1, 3, 7, 14, 30];
+
+const compactProgress = (words: Word[]) => words.filter((word) => word.custom || word.status !== "new");
 
 const wordSeeds: WordSeed[] = [
   ["the", "определённый артикль", "The book is here.", "Книга здесь."],
@@ -202,6 +206,16 @@ export default function Home() {
   const [addMessage, setAddMessage] = useState("");
   const [search, setSearch] = useState("");
   const [visibleCount, setVisibleCount] = useState(100);
+  const [user, setUser] = useState<User | null>(null);
+  const [cloudReady, setCloudReady] = useState(false);
+  const [syncStatus, setSyncStatus] = useState("Сохраняется на этом устройстве");
+  const [authOpen, setAuthOpen] = useState(false);
+  const [authMode, setAuthMode] = useState<"login" | "register">("login");
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authMessage, setAuthMessage] = useState("");
+  const [authBusy, setAuthBusy] = useState(false);
+  const syncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     try {
@@ -214,6 +228,107 @@ export default function Home() {
   useEffect(() => {
     if (ready) localStorage.setItem(STORAGE_KEY, JSON.stringify(words));
   }, [words, ready]);
+
+  useEffect(() => {
+    if (!ready) return;
+
+    const loadCloud = async (nextUser: User) => {
+      setUser(nextUser);
+      setCloudReady(false);
+      setSyncStatus("Загружаю прогресс…");
+      const { data, error } = await supabase
+        .from("user_progress")
+        .select("words")
+        .eq("user_id", nextUser.id)
+        .maybeSingle();
+
+      if (error) {
+        setSyncStatus("Нет связи — прогресс сохранён на устройстве");
+        return;
+      }
+
+      if (data?.words && Array.isArray(data.words)) {
+        setWords(restoreWords(data.words as Word[]));
+      } else {
+        const { error: saveError } = await supabase.from("user_progress").upsert({
+          user_id: nextUser.id,
+          words: compactProgress(words),
+          updated_at: new Date().toISOString(),
+        });
+        if (saveError) {
+          setSyncStatus("Нет связи — прогресс сохранён на устройстве");
+          return;
+        }
+      }
+
+      setCloudReady(true);
+      setSyncStatus("Синхронизировано");
+    };
+
+    supabase.auth.getSession().then(({ data }) => {
+      if (data.session?.user) loadCloud(data.session.user);
+    });
+
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (_event === "INITIAL_SESSION") return;
+      window.setTimeout(() => {
+        if (session?.user) loadCloud(session.user);
+        else {
+          setUser(null);
+          setCloudReady(false);
+          setSyncStatus("Сохраняется на этом устройстве");
+        }
+      }, 0);
+    });
+
+    return () => listener.subscription.unsubscribe();
+  }, [ready]);
+
+  useEffect(() => {
+    if (!user || !cloudReady) return;
+    if (syncTimer.current) clearTimeout(syncTimer.current);
+    setSyncStatus("Сохраняю…");
+    syncTimer.current = setTimeout(async () => {
+      const { error } = await supabase.from("user_progress").upsert({
+        user_id: user.id,
+        words: compactProgress(words),
+        updated_at: new Date().toISOString(),
+      });
+      setSyncStatus(error ? "Нет связи — прогресс сохранён на устройстве" : "Синхронизировано");
+    }, 700);
+    return () => { if (syncTimer.current) clearTimeout(syncTimer.current); };
+  }, [words, user, cloudReady]);
+
+  const submitAuth = async (event: FormEvent) => {
+    event.preventDefault();
+    setAuthBusy(true);
+    setAuthMessage("");
+    const credentials = { email: authEmail.trim(), password: authPassword };
+    const result = authMode === "login"
+      ? await supabase.auth.signInWithPassword(credentials)
+      : await supabase.auth.signUp({
+          ...credentials,
+          options: { emailRedirectTo: "https://aledzha.github.io/slovo-english/" },
+        });
+    setAuthBusy(false);
+    if (result.error) {
+      setAuthMessage(result.error.message === "Invalid login credentials"
+        ? "Неверная почта или пароль."
+        : result.error.message);
+      return;
+    }
+    if (authMode === "register" && !result.data.session) {
+      setAuthMessage("Проверьте почту и подтвердите регистрацию.");
+      return;
+    }
+    setAuthOpen(false);
+    setAuthPassword("");
+  };
+
+  const signOut = async () => {
+    await supabase.auth.signOut();
+    setAuthOpen(false);
+  };
 
   const counts = useMemo(() => ({
     new: words.filter((word) => word.status === "new").length,
@@ -316,6 +431,9 @@ export default function Home() {
           <button className={view === "review" ? "navActive" : ""} onClick={() => openView("review")}>Повторять <span className="navCount">{dueCount}</span></button>
           <button className={view === "words" ? "navActive" : ""} onClick={() => openView("words")}>Мои слова</button>
         </nav>
+        <button className="accountButton" onClick={() => setAuthOpen(true)}>
+          {user ? "✓ Аккаунт" : "Войти"}
+        </button>
       </header>
 
       <section className="shell">
@@ -367,6 +485,38 @@ export default function Home() {
           </section>
         )}
       </section>
+      <p className="cloudStatus"><span>✓</span> {user ? syncStatus : "Войдите, чтобы синхронизировать прогресс между устройствами"}</p>
+      {authOpen && (
+        <div className="authOverlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setAuthOpen(false); }}>
+          <section className="authDialog" role="dialog" aria-modal="true" aria-labelledby="auth-title">
+            <button className="authClose" onClick={() => setAuthOpen(false)} aria-label="Закрыть">×</button>
+            {user ? (
+              <>
+                <span className="eyebrow">Один прогресс на всех устройствах</span>
+                <h2 id="auth-title">Вы вошли</h2>
+                <p className="authEmail">{user.email}</p>
+                <p className="authHint">Теперь слова синхронизируются между телефоном, домом и работой.</p>
+                <button className="secondaryAction authSubmit" onClick={signOut}>Выйти из аккаунта</button>
+              </>
+            ) : (
+              <>
+                <span className="eyebrow">Синхронизация через Supabase</span>
+                <h2 id="auth-title">{authMode === "login" ? "Войти в аккаунт" : "Создать аккаунт"}</h2>
+                <p className="authHint">Ваш прогресс будет доступен на любом устройстве.</p>
+                <form className="authForm" onSubmit={submitAuth}>
+                  <label>Электронная почта<input type="email" value={authEmail} onChange={(event) => setAuthEmail(event.target.value)} placeholder="name@example.com" autoComplete="email" required /></label>
+                  <label>Пароль<input type="password" value={authPassword} onChange={(event) => setAuthPassword(event.target.value)} placeholder="Не менее 6 символов" minLength={6} autoComplete={authMode === "login" ? "current-password" : "new-password"} required /></label>
+                  <button className="primaryAction authSubmit" type="submit" disabled={authBusy}>{authBusy ? "Подождите…" : authMode === "login" ? "Войти" : "Зарегистрироваться"}</button>
+                  {authMessage && <p className="authMessage" role="status">{authMessage}</p>}
+                </form>
+                <button className="authSwitch" onClick={() => { setAuthMode(authMode === "login" ? "register" : "login"); setAuthMessage(""); }}>
+                  {authMode === "login" ? "Нет аккаунта? Создать" : "Уже есть аккаунт? Войти"}
+                </button>
+              </>
+            )}
+          </section>
+        </div>
+      )}
     </main>
   );
 }
